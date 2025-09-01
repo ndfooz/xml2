@@ -1,16 +1,30 @@
 PKG_CONFIG_NAME = libxml-2.0
-PKG_CONFIG ?= $(BINPREF)pkg-config
-PKG_LIBS := $(shell $(PKG_CONFIG) --libs $(PKG_CONFIG_NAME))
-STATIC_CFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP -DLIBXML_STATIC -I../inst/include
+PKG_CONFIG ?= pkg-config
+
+# try to find ucrt64 pkg-config, fallback to default
+PKG_CONFIG := $(shell where pkg-config | findstr ucrt64 | head -n 1)
+PKG_CONFIG := $(subst \,/,$(PKG_CONFIG))
+
+ifeq ($(strip $(PKG_CONFIG)),)
+  $(info No ucrt64 pkg-config found, falling back to default)
+  PKG_CONFIG := pkg-config
+endif
+$(info PKG_CONFIG = $(PKG_CONFIG))
+
+BASE_CFLAGS = -DSTRICT_R_HEADERS -DR_NO_REMAP -I../inst/include
+
+PKG_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --libs $(PKG_CONFIG_NAME) 2>/dev/NULL)
+$(info PKG_LIBS = $(PKG_LIBS))
 
 ifneq ($(PKG_LIBS),)
-$(info using $(PKG_CONFIG_NAME) from Rtools)
-PKG_CPPFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKG_CONFIG_NAME)) $(STATIC_CFLAGS)
+  PKG_CPPFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PKG_CONFIG) --cflags $(PKG_CONFIG_NAME)) $(BASE_CFLAGS)
 else
-RWINLIB = ../windows/libxml2
-PKG_CPPFLAGS = -I$(RWINLIB)/include -I$(RWINLIB)/include/libxml2 $(STATIC_CFLAGS)
-PKG_LIBS = -L$(RWINLIB)/lib$(subst gcc,,$(COMPILED_BY))$(R_ARCH) -L$(RWINLIB)/lib \
-	-lxml2 -liconv -lz -lws2_32
+  $(info falling back to static libxml2)
+  RWINLIB = ../windows/libxml2
+  STATIC_CFLAGS = -DLIBXML_STATIC -DLZMA_API_STATIC -I$(RWINLIB)/include -I$(RWINLIB)/include/libxml2
+  PKG_CPPFLAGS = $(STATIC_CFLAGS) $(BASE_CFLAGS)
+  PKG_LIBS = -L$(RWINLIB)/lib$(subst gcc,,$(COMPILED_BY))$(R_ARCH) -L$(RWINLIB)/lib \
+    -lxml2 -liconv -lz -lws2_32
 endif
 
 all: $(SHLIB)
